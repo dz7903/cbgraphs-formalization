@@ -18,10 +18,12 @@ lemma Finset.inf_induction' {ι α : Type*} [SemilatticeInf α] [OrderTop α]
 
 variable {R : Type} [SemilatticeInf R] [OrderTop R]
 
-structure VC (N : Network R) where
+/-- The verification condition structure of a network `N` and a property `Y` includes all
+annotations (`I`, `Q`), the CB-graph and the assertion that all verification conditions hold and
+the CB-graph is connected. -/
+structure VC (N : Network R) (Y : N.V → R → Prop) where
   I : N.V → R → Prop
   Q : N.V → R → Prop
-  Y : N.V → R → Prop
   CBRoots : Set N.V
   CBEdges : Set N.E
   init : ∀ v, I v (N.init v)
@@ -34,9 +36,9 @@ structure VC (N : Network R) where
 
 namespace VC
 
-variable {N : Network R} {S : Schedule N} (vc : VC N)
+variable {N : Network R} {S : Schedule N} {Y} (vc : VC N Y)
 
-/-- The invariance interface `vc.I` holds at any time on any schedules. -/
+/-- The invariance `vc.I` holds at any time on any schedules. -/
 lemma invariance : ∀ v t, vc.I v (S.sem v t) := by
   intro v t
   induction t using Nat.strong_induction_on generalizing v with | _ t ih
@@ -78,7 +80,7 @@ lemma cbroot : ∀ v ∈ vc.CBRoots, vc.AbstractlyConverge S v 0 := by
     · exact ih t (Nat.lt_succ_self t)
 
 /-- With fairness assumption, a CB-edge gives an order of abstract convergence. -/
-lemma cbedge (e) (he : e ∈ vc.CBEdges) (he₁ : S.NodeEventuallyActivated e.v) (he₂ : S.EdgeEventuallyFlushed e) :
+lemma cbedge {τ} (e) (he : e ∈ vc.CBEdges) (he₁ : S.NodeNonFailed e.v) (he₂ : S.EdgeNonFailed e) :
     vc.AbstractlyConverge S e.u τ → ∃ τ' > τ, vc.AbstractlyConverge S e.v τ' := by
   classical
   intro hu
@@ -109,7 +111,8 @@ lemma cbedge (e) (he : e ∈ vc.CBEdges) (he₁ : S.NodeEventuallyActivated e.v)
     rw [← eq_of_le_of_not_lt ht ht'] at h
     contradiction
 
-/-- A connected CB-graph gives abstract convergence on all fair schedules (note `VC` already assumes the connectedness). -/
+/-- A connected CB-graph gives abstract convergence on all fair schedules (note `VC` already
+assumes the connectedness). -/
 theorem connected_cbgraph (h : S.Fair) : ∀ v, ∃ τ, ∀ t ≥ τ, vc.Q v (S.sem v t) := by
   intro v
   induction vc.connected v with
@@ -121,8 +124,9 @@ theorem connected_cbgraph (h : S.Fair) : ∀ v, ∃ τ, ∀ t ≥ τ, vc.Q v (S.
     rcases vc.cbedge e he (h.1 e.v) (h.2 e) hτ₁ with ⟨τ₂, _, hτ₂⟩
     exact ⟨τ₂, hτ₂⟩
 
-/-- A CB-graph with `k` connectivity on node `v` gives abstract convergence at `v` on all schedules with at most `k` failures. -/
-theorem connected_cbgraph_with_failure (h₁ : S.FairWithFailure k)
+/-- A CB-graph with `k` connectivity on node `v` gives abstract convergence at `v` on all schedules
+with at most `k` failures. -/
+theorem connected_cbgraph_with_failure {k v} (h₁ : S.FairWithFailure k)
     (h₂ : Graph.ConnectedWithFailure vc.CBRoots vc.CBEdges v k) :
     ∃ τ, ∀ t ≥ τ, vc.Q v (S.sem v t) := by
   rcases h₁ with ⟨h₁, F, hF, h₁'⟩
@@ -137,16 +141,20 @@ theorem connected_cbgraph_with_failure (h₁ : S.FairWithFailure k)
     rcases vc.cbedge e he.1 (h₁ e.v) (h₁' e he.2) hτ₁ with ⟨τ₂, _, hτ₂⟩
     exact ⟨τ₂, hτ₂⟩
 
-theorem correctness (h : S.Fair) : ∀ v, ∃ τ, ∀ t ≥ τ, vc.Y v (S.sem v t) := by
+include vc in
+/-- Soundness theorem: if VC holds, then `Y` holds eventually stably for any fair schedule. -/
+theorem correctness (h : S.Fair) : ∀ v, ∃ τ, ∀ t ≥ τ, Y v (S.sem v t) := by
   intro v
   rcases vc.connected_cbgraph h v with ⟨τ, hτ⟩
   exists τ
   intro t ht
   exact vc.property v _ (hτ t ht)
 
-theorem correctness_with_failure (h₁ : S.FairWithFailure k)
+/-- Soundness theorem with fault tolerance: if VC holds, and the CB-graph has connectivity `k`,
+then `Y` holds eventually stably for any schedule with at most `k` failed edges. -/
+theorem correctness_with_failure {k} (h₁ : S.FairWithFailure k)
     (h₂ : ∀ v, Graph.ConnectedWithFailure vc.CBRoots vc.CBEdges v k) :
-    ∀ v, ∃ τ, ∀ t ≥ τ, vc.Y v (S.sem v t) := by
+    ∀ v, ∃ τ, ∀ t ≥ τ, Y v (S.sem v t) := by
   intro v
   rcases vc.connected_cbgraph_with_failure h₁ (h₂ v) with ⟨τ, hτ⟩
   exists τ

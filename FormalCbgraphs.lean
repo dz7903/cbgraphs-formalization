@@ -2,4 +2,5 @@
 -- Import modules here that should be built as part of the library.
 import FormalCbgraphs.Graph
 import FormalCbgraphs.Network
-import FormalCbgraphs.Verification
+import FormalCbgraphs.Soundness
+import FormalCbgraphs.Completeness

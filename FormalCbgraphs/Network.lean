@@ -1,65 +1,49 @@
 import Mathlib.Tactic
 import FormalCbgraphs.Graph
 
+/-- A network (instance) is a graph with initial routes and transfer functions. -/
 structure Network (R : Type) extends Graph where
   init : V → R
   transfer : toGraph.E → R → R
 
 variable {R : Type} {N : Network R}
 
+/-- A schedule of a network `N` includes activation function and flow function. -/
 structure Schedule (N : Network R) where
   nodeActivate : N.V → Nat → Bool
   flow : N.E → Nat → Nat
+  /-- Flow function must satisfy causality. -/
   flow_lt : ∀ (e t), flow e (t + 1) < (t + 1)
 
 namespace Schedule
 
-variable (S : Schedule N)
+variable (S : Schedule N) {e : N.E}
 
-/-- A node is said eventually activated if it is activated infinitely often. -/
-def NodeEventuallyActivated (v : N.V) : Prop :=
+/-- A node is said non-failed if it is activated infinitely often. -/
+def NodeNonFailed (v : N.V) : Prop :=
   ∀ T, ∃ t ≥ T, S.nodeActivate v t
 
-/-- An edge is said eventually delivering if messages are guaranteed to be delivered infinitely often. This is superseded by `edgeEventualFlush`. -/
-def EdgeEventuallyDelivering (e : N.E) : Prop :=
-  ∀ T, ∃ t ≥ T, S.flow e t ≥ T
-
-/-- An edge is said eventually flushed if one message will not be sent infinitely times. -/
-def EdgeEventuallyFlushed (e : N.E) : Prop :=
+/-- An edge is said non-failed if one message can not be sent infinite times. -/
+def EdgeNonFailed (e : N.E) : Prop :=
   ∀ T, ∃ T' ≥ T, ∀ t ≥ T', S.flow e t ≥ T
 
-theorem eventuallyFlushed_implies_eventuallyDelivering :
-    S.EdgeEventuallyFlushed e → S.EdgeEventuallyDelivering e := by
-  intro h T
-  rcases h T with ⟨t, ht, ht'⟩
-  exact ⟨t, ht, ht' t le_rfl⟩
-
-/-- An edge is said ordered if it deliver messages in the same order as it was sent. Our theorems do not require `edgeOrdered` and only require a weaker property `edgeEventualFlush`. -/
-def EdgeOrdered (e : N.E) : Prop :=
-  ∀ t₁ t₂, t₁ ≤ t₂ → S.flow e t₁ ≤ S.flow e t₂
-
-theorem ordered_and_eventuallyDelivering_implies_eventuallyFlushed :
-    S.EdgeOrdered e → S.EdgeEventuallyDelivering e → S.EdgeEventuallyFlushed e := by
-  intro h₁ h₂ T
-  rcases h₂ T with ⟨t₁, ht₁, ht₁'⟩
-  refine ⟨t₁, ht₁, ?_⟩
-  intro t₂ ht₂
-  exact ht₁'.trans (h₁ _ _ ht₂)
-
-/-- A schedule is fair if all nodes are eventually activated and all edges are eventually flushed. -/
+/-- A schedule is fair if all nodes and edges are non-failed. -/
 def Fair : Prop :=
-  (∀ v, S.NodeEventuallyActivated v) ∧ ∀ e, S.EdgeEventuallyFlushed e
+  (∀ v, S.NodeNonFailed v) ∧ ∀ e, S.EdgeNonFailed e
 
-/-- A schedule is fair with at most `k` failure if all nodes are eventually activated, and all edges except at most `k` failed edges are eventually flushed. -/
+/-- A schedule is fair with at most `k` failure if all nodes are non-failed, and all edges except
+at most `k` are non-failed. -/
 def FairWithFailure (k : ℕ) : Prop :=
-  (∀ v, S.NodeEventuallyActivated v) ∧ ∃ (F : Finset N.E), F.card ≤ k ∧ ∀ e ∉ F, S.EdgeEventuallyFlushed e
+  (∀ v, S.NodeNonFailed v) ∧ ∃ (F : Finset N.E), F.card ≤ k ∧ ∀ e ∉ F, S.EdgeNonFailed e
 
 theorem fairWithFailure_zero_iff : S.FairWithFailure 0 ↔ S.Fair := by
   simp [FairWithFailure, Fair]
 
 variable [SemilatticeInf R] [OrderTop R]
 
-/-- The semantics of a network. -/
+/-- The semantics of a network. This requires the existence of selection function
+(`SemilatticeInf R`) and the invalid route (`OrderTop R`). We do not require a linear order on `R`,
+though that is the usual case (we do require that in completeness). -/
 def sem : N.V → Nat → R
 | v, 0 => N.init v
 | v, t + 1 =>
@@ -73,3 +57,27 @@ def sem : N.V → Nat → R
     sem v t
 
 end Schedule
+
+variable (N) in
+/-- Apply each transfer functions along a path in the network. -/
+def Network.applyPath : ∀ {v}, N.Path v → R
+| _, .nil (u := u) => N.init u
+| _, .cons p h => N.transfer ⟨_, _, h⟩ (applyPath p)
+
+variable (N) in
+/-- There exists a fair schedule, which is the synchronous schedule. -/
+lemma Network.exists_fair_schedule : ∃ (S : Schedule N), S.Fair := by
+  refine ⟨{
+    nodeActivate v t := True
+    flow e t := t - 1
+    flow_lt := by grind
+  }, ?_, ?_⟩
+  · intro v
+    simp only [Schedule.NodeNonFailed, ge_iff_le, decide_true, and_true]
+    intro T
+    exists T
+  · intro e
+    simp only [Schedule.EdgeNonFailed, ge_iff_le]
+    intro T
+    exists T + 1
+    grind
