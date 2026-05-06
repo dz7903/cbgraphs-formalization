@@ -1,4 +1,19 @@
 import FormalCbgraphs.Soundness
+import Mathlib.Order.ConditionallyCompleteLattice.Defs
+
+-- def Distributive {R} [SemilatticeInf R] (f : R → R) :=
+--   ∀ x y, f x ⊓ f y = f (x ⊓ y)
+
+-- theorem distributive_iff_monotone {R} [LinearOrder R] {f : R → R} : Distributive f ↔ Monotone f := by
+--   constructor
+--   · intro hf x y h
+--     rw [← inf_eq_right] at h ⊢
+--     rw [hf, h]
+--   · intro hf x y
+--     rw [hf.map_min]
+
+-- def Network.IsDistributive {R} [SemilatticeInf R] (N : Network R) :=
+--   ∀ e, Distributive (N.transfer e)
 
 def Network.IsStrictMono {R} [Preorder R] (N : Network R) :=
   ∀ e, StrictMono (N.transfer e)
@@ -8,35 +23,34 @@ def Network.IsEventualStable {R} [SemilatticeInf R] [OrderTop R] (N : Network R)
     (Y : N.V → R → Prop) :=
   ∀ (S : Schedule N), S.Fair → ∀ v, ∃ t, ∀ t' ≥ t, Y v (S.sem v t')
 
-variable {R} [CompleteLinearOrder R] [WellFoundedLT R] {N : Network R} {u v : N.V}
+variable {R} [LinearOrder R] [OrderTop R] [WellFoundedLT R] {N : Network R} {u v : N.V}
   {Y : N.V → R → Prop} (hN : N.IsStrictMono) (hY : N.IsEventualStable Y)
 
-def bestRoute (v : N.V) : R :=
-  ⨅ (p : N.Path v), N.applyPath p
+noncomputable def bestRoute (v : N.V) : R :=
+  wellFounded_lt.min {N.applyPath p | (p : N.Path v)} ⟨_, .nil, rfl⟩
 
-theorem exists_applyPath_eq_bestRoute (u : N.V) :
-    ∃ p : N.Path u, N.applyPath p = bestRoute u := by
-  rcases Finset.exists_inf_eq_iInf (N.applyPath (v := u)) with ⟨s, hs⟩
-  rcases s.eq_empty_or_nonempty with rfl | hs'
-  · rw [eq_comm, Finset.inf_empty, iInf_eq_top] at hs
-    exists .nil
-    simp [bestRoute, hs]
-  · rcases s.exists_mem_eq_inf hs' N.applyPath with ⟨p, -, hp⟩
-    exists p
-    rw [bestRoute, ← hs, hp]
+omit [OrderTop R] in
+lemma bestRoute_le_applyPath (p : N.Path v) : bestRoute v ≤ N.applyPath p :=
+  WellFounded.min_le _ (by exists p)
+
+omit [OrderTop R] in
+theorem exists_applyPath_eq_bestRoute (v : N.V) :
+    ∃ p : N.Path v, N.applyPath p = bestRoute v :=
+  wellFounded_lt.min_mem {N.applyPath p | (p : N.Path v)} _
 
 include hN in
+omit [OrderTop R] in
 theorem applyPath_eq_bestRoute_of_cons {p : N.Path u} {huv : u ∈ N.neighbors v} :
     N.applyPath (p.cons huv) = bestRoute v → N.applyPath p = bestRoute u := by
   intro h
-  apply (iInf_le _ _).antisymm'
+  apply (bestRoute_le_applyPath _).antisymm'
   by_contra! h'
   apply h.not_gt
   rw [Network.applyPath]
   apply (hN ⟨u, v, huv⟩ h').trans_le'
   rcases exists_applyPath_eq_bestRoute u with ⟨p, hp⟩
-  rw [← bestRoute, ← hp, ← Network.applyPath]
-  exact iInf_le _ _
+  rw [← hp, ← Network.applyPath]
+  exact bestRoute_le_applyPath _
 
 include hN hY in
 /-- Soundness theorem: if `Y` holds eventually stably for any fair schedule of `N`, and all
@@ -62,12 +76,12 @@ theorem completeness : Nonempty (VC N Y) := by
       intro hv ⟨p, hp⟩ hv'
       simp only [Set.mem_setOf_eq, Network.applyPath] at hv
       rw [hv', min_eq_left_iff, ← hp, ← Network.applyPath]
-      exact iInf_le _ _
+      exact bestRoute_le_applyPath _
     edge e := by
       intro ⟨p, hp⟩ su sv hu ⟨q, hq⟩
       have hp' := applyPath_eq_bestRoute_of_cons hN hp
       rw [hu, ← hq, ← hp', ← Network.applyPath, hp, min_eq_right_iff]
-      exact iInf_le _ _
+      exact bestRoute_le_applyPath _
     connected v := by
       rcases exists_applyPath_eq_bestRoute v with ⟨p, hp⟩
       induction p with
