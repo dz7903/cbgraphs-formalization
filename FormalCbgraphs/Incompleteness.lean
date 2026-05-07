@@ -1,5 +1,4 @@
 import FormalCbgraphs.Completeness
-import Mathlib.Tactic.DeriveFintype
 
 @[simp]
 theorem Finset.attach_singleton {α} [DecidableEq α] (a : α) :
@@ -30,7 +29,7 @@ def f1 : R → R
 | none => ⊤
 
 def f2 : R → R
-| WithTop.some x => if x < 3 then WithTop.some (x + 3) else ⊤
+| WithTop.some x => if x < 2 then WithTop.some (x + 3) else ⊤
 | none => ⊤
 
 def f3 : R → R

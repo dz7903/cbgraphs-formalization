@@ -1,20 +1,6 @@
 import FormalCbgraphs.Soundness
 import Mathlib.Order.ConditionallyCompleteLattice.Defs
 
--- def Distributive {R} [SemilatticeInf R] (f : R → R) :=
---   ∀ x y, f x ⊓ f y = f (x ⊓ y)
-
--- theorem distributive_iff_monotone {R} [LinearOrder R] {f : R → R} : Distributive f ↔ Monotone f := by
---   constructor
---   · intro hf x y h
---     rw [← inf_eq_right] at h ⊢
---     rw [hf, h]
---   · intro hf x y
---     rw [hf.map_min]
-
--- def Network.IsDistributive {R} [SemilatticeInf R] (N : Network R) :=
---   ∀ e, Distributive (N.transfer e)
-
 def Network.IsStrictMono {R} [Preorder R] (N : Network R) :=
   ∀ e, StrictMono (N.transfer e)
 
