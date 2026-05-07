@@ -64,20 +64,24 @@ def Network.applyPath : ∀ {v}, N.Path v → R
 | _, .nil (u := u) => N.init u
 | _, .cons p h => N.transfer ⟨_, _, h⟩ (applyPath p)
 
-variable (N) in
-/-- There exists a fair schedule, which is the synchronous schedule. -/
-lemma Network.exists_fair_schedule : ∃ (S : Schedule N), S.Fair := by
-  refine ⟨{
-    nodeActivate v t := True
-    flow e t := t - 1
-    flow_lt := by grind
-  }, ?_, ?_⟩
+def Network.syncSchedule : Schedule N where
+  nodeActivate v t := True
+  flow e t := t - 1
+  flow_lt := by grind
+
+theorem Network.fair_syncSchedule : N.syncSchedule.Fair := by
+  constructor
   · intro v
-    simp only [Schedule.NodeNonFailed, ge_iff_le, decide_true, and_true]
+    simp only [syncSchedule, Schedule.NodeNonFailed, ge_iff_le, decide_true, and_true]
     intro T
     exists T
   · intro e
-    simp only [Schedule.EdgeNonFailed, ge_iff_le]
+    simp only [syncSchedule,Schedule.EdgeNonFailed, ge_iff_le]
     intro T
     exists T + 1
     grind
+
+variable (N) in
+/-- There exists a fair schedule, which is the synchronous schedule. -/
+lemma Network.exists_fair_schedule : ∃ (S : Schedule N), S.Fair :=
+  ⟨N.syncSchedule, N.fair_syncSchedule⟩
